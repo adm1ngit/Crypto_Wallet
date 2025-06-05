@@ -5,6 +5,8 @@ class Wallet(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     address = models.CharField(max_length=255, unique=True)
     private_key = models.CharField(max_length=255)
+    eth_balance = models.FloatField(default=0.0)
+    btc_balance = models.FloatField(default=0.0)
 
     def __str__(self):
         return f"{self.user.username} - {self.address}"

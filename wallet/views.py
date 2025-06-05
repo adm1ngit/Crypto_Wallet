@@ -5,7 +5,7 @@ from web3 import Web3
 from .models import Wallet, Transaction
 from django.conf import settings
 import stripe
-from .utils import get_eth_price_in_usd, get_btc_price_in_usd
+from .utils import get_eth_price_in_usd, get_btc_price_in_usd, get_exchange_rate, update_wallet_balance
 from models import User
 import time
 
@@ -175,4 +175,48 @@ class PaymentWebhook(APIView):
         )
 
         return Response({'status': 'ok'})
+    
+
+
+class ExchangeCrypto(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        from_coin = request.data.get("from_coin").lower()  # eth
+        to_coin = request.data.get("to_coin").lower()      # btc
+        amount = float(request.data.get("amount"))         # 0.1
+
+        rate = get_exchange_rate(from_coin, to_coin)
+        to_amount = amount * rate
+
+        wallet = Wallet.objects.get(user=request.user)
+
+        Transaction.objects.create(
+            wallet=wallet,
+            from_address=wallet.address,
+            to_address=wallet.address,
+            amount=to_amount,
+            tx_hash=f"SWAP-{from_coin.upper()}-{to_coin.upper()}-{int(time.time())}"
+        )
+
+        return Response({
+            "message": "Crypto exchanged successfully",
+            "from_coin": from_coin,
+            "to_coin": to_coin,
+            "rate": rate,
+            "converted_amount": to_amount
+        })
+
+
+class GetWalletBalance(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        wallet = Wallet.objects.get(user=request.user)
+        update_wallet_balance(wallet)
+
+        return Response({
+            'eth_balance': wallet.eth_balance,
+            'btc_balance': wallet.btc_balance,
+        })
 
