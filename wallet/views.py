@@ -5,7 +5,9 @@ from web3 import Web3
 from .models import Wallet, Transaction
 from django.conf import settings
 import stripe
-from .utils import get_eth_price_in_usd
+from .utils import get_eth_price_in_usd, get_btc_price_in_usd
+from models import User
+import time
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
@@ -89,3 +91,88 @@ class BuyCrypto(APIView):
             }
         )
         return Response({'checkout_url': session.url})
+
+class PaymentWebhook(APIView):
+    permission_classes = []
+
+    def post(self, request):
+        data = request.data
+        user_id = data.get('metadata', {}).get('user_id')
+        crypto_type = data.get('metadata', {}).get('crypto_type', 'eth')
+        crypto_amount = float(data.get('metadata', {}).get('crypto_amount', 0))
+
+        user = User.objects.get(id=user_id)
+        wallet = Wallet.objects.get(user=user)
+
+        Transaction.objects.create(
+            wallet=wallet,
+            to_address=wallet.address,
+            amount=crypto_amount,
+            tx_hash=f"BUY-{crypto_type.upper()}-{int(time.time())}"
+        )
+
+        return Response({'status': 'ok'})
+
+
+
+class BuyCryptoStripe(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        usd_amount = float(request.data.get("amount"))
+        crypto_type = request.data.get("crypto", "eth").lower()
+        wallet = Wallet.objects.get(user=request.user)
+
+        if crypto_type == "eth":
+            price = get_eth_price_in_usd()
+        elif crypto_type == "btc":
+            price = get_btc_price_in_usd()
+        else:
+            return Response({"error": "Unsupported crypto type"}, status=400)
+
+        crypto_amount = usd_amount / price
+
+        session = stripe.checkout.Session.create(
+            payment_method_types=['card'],
+            line_items=[{
+                'price_data': {
+                    'currency': 'usd',
+                    'unit_amount': int(usd_amount * 100),
+                    'product_data': {'name': f'Buy {crypto_type.upper()}'}
+                },
+                'quantity': 1,
+            }],
+            mode='payment',
+            success_url='https://yourdomain.com/success',
+            cancel_url='https://yourdomain.com/cancel',
+            metadata={
+                'user_id': str(request.user.id),
+                'crypto_type': crypto_type,
+                'crypto_amount': str(crypto_amount)
+            }
+        )
+
+        return Response({'checkout_url': session.url})
+    
+
+class PaymentWebhook(APIView):
+    permission_classes = []
+
+    def post(self, request):
+        data = request.data
+        user_id = data.get('metadata', {}).get('user_id')
+        crypto_type = data.get('metadata', {}).get('crypto_type', 'btc')
+        crypto_amount = float(data.get('metadata', {}).get('crypto_amount', 0))
+
+        user = User.objects.get(id=user_id)
+        wallet = Wallet.objects.get(user=user)
+
+        Transaction.objects.create(
+            wallet=wallet,
+            to_address=wallet.address,
+            amount=crypto_amount,
+            tx_hash=f"BUY-{crypto_type.upper()}-{int(time.time())}"
+        )
+
+        return Response({'status': 'ok'})
+

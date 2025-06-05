@@ -15,3 +15,14 @@ def get_eth_price_in_uzs():
     response = requests.get(url, params=params)
     data = response.json()
     return data["ethereum"]["uzs"]
+
+
+def get_btc_price_in_uzs():
+    url = "https://api.coingecko.com/api/v3/simple/price"
+    params = {
+        'ids': 'bitcoin',
+        'vs_currencies': 'uzs'
+    }
+    response = requests.get(url, params=params)
+    data = response.json()
+    return data["bitcoin"]["uzs"]
