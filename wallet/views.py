@@ -5,7 +5,7 @@ from web3 import Web3
 from .models import Wallet, Transaction
 from django.conf import settings
 import stripe
-from .utils import get_eth_price_in_usd, get_btc_price_in_usd, get_exchange_rate, update_wallet_balance
+from .utils import get_eth_price_in_usd, get_btc_price_in_usd, get_exchange_rate, update_wallet_balance, get_crypto_price_in_uzs
 from models import User
 import time
 
@@ -182,9 +182,9 @@ class ExchangeCrypto(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        from_coin = request.data.get("from_coin").lower()  # eth
-        to_coin = request.data.get("to_coin").lower()      # btc
-        amount = float(request.data.get("amount"))         # 0.1
+        from_coin = request.data.get("from_coin").lower()  
+        to_coin = request.data.get("to_coin").lower()      
+        amount = float(request.data.get("amount"))         
 
         rate = get_exchange_rate(from_coin, to_coin)
         to_amount = amount * rate
@@ -220,3 +220,30 @@ class GetWalletBalance(APIView):
             'btc_balance': wallet.btc_balance,
         })
 
+
+class ConvertToUZS(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        coin = request.data.get("coin", "eth").lower()
+        amount = float(request.data.get("amount"))
+        wallet = Wallet.objects.get(user=request.user)
+
+        if coin == "eth" and wallet.eth_balance < amount:
+            return Response({"error": "Yetarli ETH mavjud emas"}, status=400)
+        if coin == "btc" and wallet.btc_balance < amount:
+            return Response({"error": "Yetarli BTC mavjud emas"}, status=400)
+
+        price = get_crypto_price_in_uzs(coin)
+        uzs_value = amount * price
+
+        if coin == "eth":
+            wallet.eth_balance -= amount
+        else:
+            wallet.btc_balance -= amount
+        wallet.save()
+
+        return Response({
+            "message": f"{amount} {coin.upper()} = {round(uzs_value, 2)} UZS",
+            "converted": uzs_value
+        })

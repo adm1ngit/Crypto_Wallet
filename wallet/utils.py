@@ -53,3 +53,13 @@ def update_wallet_balance(wallet: Wallet):
     wallet.eth_balance = sum(tx.amount for tx in eth_tx)
     wallet.btc_balance = sum(tx.amount for tx in btc_tx)
     wallet.save()
+
+
+def get_crypto_price_in_uzs(coin_id: str) -> float:
+    url = "https://api.coingecko.com/api/v3/simple/price"
+    params = {
+        'ids': coin_id,
+        'vs_currencies': 'uzs'
+    }
+    response = requests.get(url, params=params)
+    return response.json()[coin_id]['uzs']
