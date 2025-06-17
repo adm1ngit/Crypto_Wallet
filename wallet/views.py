@@ -5,7 +5,7 @@ from web3 import Web3
 from .models import Wallet, Transaction
 from django.conf import settings
 import stripe
-from .utils import get_eth_price_in_usd, get_btc_price_in_usd, get_exchange_rate, update_wallet_balance, get_crypto_price_in_uzs
+from .utils import get_eth_price_in_usd, get_btc_price_in_usd, get_exchange_rate, update_wallet_balance, get_crypto_price_in_uzs, send_eth_transaction
 from models import User
 import time
 
@@ -247,3 +247,31 @@ class ConvertToUZS(APIView):
             "message": f"{amount} {coin.upper()} = {round(uzs_value, 2)} UZS",
             "converted": uzs_value
         })
+
+
+class SendCrypto(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        coin = request.data.get("coin", "eth").lower()
+        to_address = request.data.get("to_address")
+        amount = float(request.data.get("amount"))
+        wallet = Wallet.objects.get(user=request.user)
+
+        if coin != "eth":
+            return Response({"error": "Hozircha faqat ETH qo‘llab-quvvatlanadi"}, status=400)
+        if wallet.eth_balance < amount:
+            return Response({"error": "Balansda yetarli ETH yo‘q"}, status=400)
+
+        tx_hash = send_eth_transaction(to_address, amount)
+        wallet.eth_balance -= amount
+        wallet.save()
+
+        Transaction.objects.create(
+            wallet=wallet,
+            to_address=to_address,
+            amount=amount,
+            tx_hash=tx_hash
+        )
+
+        return Response({"status": "yuborildi", "tx_hash": tx_hash})
