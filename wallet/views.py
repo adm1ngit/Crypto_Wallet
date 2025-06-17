@@ -5,7 +5,7 @@ from web3 import Web3
 from .models import Wallet, Transaction
 from django.conf import settings
 import stripe
-from .utils import get_eth_price_in_usd, get_btc_price_in_usd, get_exchange_rate, update_wallet_balance, get_crypto_price_in_uzs, send_eth_transaction
+from .utils import *
 from models import User
 import time
 
@@ -275,3 +275,64 @@ class SendCrypto(APIView):
         )
 
         return Response({"status": "yuborildi", "tx_hash": tx_hash})
+
+
+class SendBTC(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def post(self, request):
+        to_address = request.data.get("to_address")
+        amount = float(request.data.get("amount"))
+        wallet = Wallet.objects.get(user=request.user)
+
+        if wallet.btc_balance < amount:
+            return Response({"error": "Yetarli BTC mavjud emas"}, status=400)
+
+        tx_hash = send_btc_transaction(to_address, amount)
+        wallet.btc_balance -= amount
+        wallet.save()
+
+        Transaction.objects.create(
+            wallet=wallet,
+            to_address=to_address,
+            amount=amount,
+            tx_hash=tx_hash
+        )
+
+        return Response({"status": "Yuborildi", "tx_hash": tx_hash})
+
+
+class SyncWalletBalance(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        wallet = Wallet.objects.get(user=request.user)
+
+        eth_balance = get_eth_balance_from_chain(wallet.address)
+        btc_balance = get_btc_balance_from_chain(wallet.btc_address)
+
+        wallet.eth_balance = eth_balance
+        wallet.btc_balance = btc_balance
+        wallet.save()
+
+        return Response({
+            "eth_balance": eth_balance,
+            "btc_balance": btc_balance
+        })
+
+
+class TransactionHistory(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request):
+        wallet = Wallet.objects.get(user=request.user)
+        txs = Transaction.objects.filter(wallet=wallet).order_by('-created_at')
+        return Response([
+            {
+                "tx_hash": tx.tx_hash,
+                "amount": tx.amount,
+                "to": tx.to_address,
+                "from": tx.from_address,
+                "date": tx.created_at
+            } for tx in txs
+        ])

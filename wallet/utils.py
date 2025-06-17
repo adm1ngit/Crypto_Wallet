@@ -3,7 +3,7 @@ import os
 import secrets
 import requests
 from .models import Wallet, Transaction
-
+from bitcoinlib.wallets import Wallet as BtcWallet
 
 web3 = Web3(Web3.HTTPProvider("https://mainnet.infura.io/v3/c277d602861042f58ad5e60a563859eb"))
 
@@ -85,3 +85,34 @@ def send_eth_transaction(to_address: str, amount_eth: float) -> str:
     tx_hash = web3.eth.send_raw_transaction(signed_tx.rawTransaction)
 
     return web3.to_hex(tx_hash)
+
+
+def send_btc_transaction(to_address: str, amount_btc: float) -> str:
+     wallet_name = os.getenv('BTC_WALLET_NAME')
+     wallet = BtcWallet(wallet_name)
+
+     tx = wallet.send_to(to_address, amount_btc, network='bitcoin')
+
+     return tx.txid
+
+def get_eth_balance_from_chain(address: str) -> float:
+    ETHERSCAN_API_KEY = os.getenv("ETHERSCAN_API_KEY")
+    url = f"https://api.etherscan.io/api"
+    params = {
+        'module': 'account',
+        'action': 'balance',
+        'address': address,
+        'tag': 'latest',
+        'apikey': ETHERSCAN_API_KEY
+    }
+    response = requests.get(url, params=params)
+    result = int(response.json()['result'])
+    return result / 1e18
+
+
+def get_btc_balance_from_chain(address: str) -> float:
+    url = f"https://blockstream.info/api/address/{address}"
+    response = requests.get(url)
+    data = response.json()
+    confirmed = data['chain_stats']['funded_txo_sum'] - data['chain_stats']['spent_txo_sum']
+    return confirmed / 1e8
